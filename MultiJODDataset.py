@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
@@ -25,6 +26,12 @@ class MultiJODDataset(Dataset):
         self.data_dir = data_dir
         self.patch_df = pd.read_csv(patch_csv)
         self.video_df = pd.read_csv(video_csv)
+
+        self.max_velocity = 0.31414 # 1.79153
+        self.min_velocity = 7e-05
+        self.min_bitrate = 500
+        self.max_bitrate = 2000
+
         self.transform = transforms.Compose([
             transforms.Resize(patch_size),  # Resize images to 64x64
             transforms.ToTensor(),  # Convert images to PyTorch tensors
@@ -55,6 +62,13 @@ class MultiJODDataset(Dataset):
 
     def __len__(self):
         return len(self.pairs)
+    
+    def normalize(self, sample, min_vals, max_vals):
+        # print(f'val, min_vals, max_vals {sample, min_vals, max_vals}')
+        sample = (sample - min_vals) / (max_vals - min_vals)
+        sample = np.clip(sample, 0, 1)
+        return round(sample, 3)
+
 
     def __getitem__(self, idx):
         """
@@ -67,11 +81,12 @@ class MultiJODDataset(Dataset):
         patch_idx, bitrate = self.pairs[idx]
 
         patch_row = self.patch_df.iloc[patch_idx]
-        patch_path = patch_row["patch_path"]     # e.g. "bedroom_path1_seg1_1_fr0.jpg"
+        patch_path = patch_row["patch_path"]     # e.g. "bedroom_path1_seg1_1_frame0.jpg"
         video_id   = patch_row["video_id"]
         velocity   = patch_row["velocity"]
-
-        patch_path_full = os.path.join(self.data_dir, patch_path)
+        patch_path_full = os.path.join(self.data_dir, 'patches', patch_path)
+        # print(f'patch_path_full {patch_path_full}')
+        
         image = Image.open(patch_path_full).convert("RGB")
 
         if self.transform:
@@ -81,10 +96,17 @@ class MultiJODDataset(Dataset):
 
         # Convert everything to torch
         jod_tensor = torch.tensor(jod_array, dtype=torch.float)   # [50]
+        
+        # normalize
+        bitrate = self.normalize(bitrate, self.min_bitrate, self.max_bitrate)
+        velocity = self.normalize(velocity, self.min_velocity, self.max_velocity)
+
         velocity   = torch.tensor([velocity], dtype=torch.float)  # shape [1]
         bitrate    = torch.tensor([bitrate],  dtype=torch.float)  # shape [1]
 
         return image, velocity, bitrate, jod_tensor
+    
+
     #     self.patch_df = pd.read_csv(patch_csv)
     #     video_df = pd.read_csv(video_csv)
 
