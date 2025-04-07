@@ -55,16 +55,11 @@ class MultiJODDataset(Dataset):
             for b in bitrates:
                 if (video_id, b) in self.video_dict:
                     self.pairs.append((i, b)) # (row_1, bitrate)
-        print(f'Total number of data {len(self.pairs)}, e.g. row_index, bitrate: {self.pairs[-1]}')
-            # count += 1
-            # if count >=3:
-            #     break
 
     def __len__(self):
         return len(self.pairs)
     
     def normalize(self, sample, min_vals, max_vals):
-        # print(f'val, min_vals, max_vals {sample, min_vals, max_vals}')
         sample = (sample - min_vals) / (max_vals - min_vals)
         sample = np.clip(sample, 0, 1)
         return round(sample, 3)

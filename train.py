@@ -3,7 +3,7 @@ import time
 import torch
 
 import torch.optim as optim
-# from tqdm import tqdm
+from tqdm import tqdm
 
 # import torchvision
 import argparse
@@ -38,8 +38,6 @@ def load_dataset():
         video_csv=train_video_info_csv,
     )
 
-    print(f'len(train_dataset) {len(train_dataset)}')
-
     val_dataset = MultiJODDataset(
         data_dir=config.val_image_dir,
         patch_csv=val_patch_info_csv,
@@ -51,6 +49,8 @@ def load_dataset():
         patch_csv=test_patch_info_csv,
         video_csv=test_video_info_csv,
     )
+
+    print(f'Total number of: train data {len(train_dataset)}, val data {len(val_dataset)}, test data {len(test_dataset)}')
 
     train_loader = DataLoader(
         train_dataset,
@@ -98,16 +98,16 @@ def train_one_epoch(model, train_prefetcher, optimizer, criterion, writer, epoch
 
     total_train_loss = 0.0
     batch_count = 0
+    # pbar = tqdm(total=len(train_prefetcher), desc=f"[Epoch {epoch+1}] Training", leave=False)
+
 
     batch = train_prefetcher.next()  # Grab the first batch
     while batch is not None:
-        # Extract data (already on GPU if your CUDAPrefetcher does .to(device))
-        print(f'')
+        # Extract data, image, velocity, bitrate, jod_tensor, (already on GPU if your CUDAPrefetcher does .to(device))
         image = batch[0]
         velocity = batch[1]
         bitrate = batch[2]
         jod = batch[3] #.to(config.device, non_blocking=True)
-        # image, velocity, bitrate, jod_tensor are already on device
 
         # Forward/backward
         optimizer.zero_grad() # 1. zero out gradients, otherwise, gradients accumulate over epochs
@@ -118,9 +118,12 @@ def train_one_epoch(model, train_prefetcher, optimizer, criterion, writer, epoch
 
         total_train_loss += loss.item()
         batch_count += 1
+        # pbar.set_postfix(loss=loss.item())
+        # pbar.update(1)
 
         batch = train_prefetcher.next()
 
+    # pbar.close()
     avg_train_loss = total_train_loss / batch_count
     print(f"[Epoch {epoch+1}] Train Loss: {avg_train_loss:.4f}")
 
@@ -152,18 +155,16 @@ def validate_one_epoch(model, val_prefetcher, criterion, writer, epoch):
             batch = val_prefetcher.next()
 
     avg_val_loss = total_val_loss / batch_count
-    print(f"[Epoch {epoch+1}] Val   Loss: {avg_val_loss:.4f}")
+    print(f"[Epoch {epoch+1}] Val   Loss: {avg_val_loss:.4f}\n")
 
     if writer is not None:
         writer.add_scalar("Loss/Val", avg_val_loss, epoch)
 
     return avg_val_loss
 
-# --------------------
-# Run inference on test data
-# --------------------
+
 def test_model(model, test_prefetcher, criterion):
-    print("[Info] Running inference on test set...")
+    print("\n[Info] Running inference on test set...")
     model.eval()
     test_prefetcher.reset()
 
@@ -197,7 +198,7 @@ if __name__ == "__main__":
     train_prefetcher, val_prefetcher, test_prefetcher = load_dataset()
     batches = len(train_prefetcher)
     print(f'Total number of batches {batches}')
-    print("Load train dataset and valid dataset successfully.")
+    print("\nLoad train dataset and valid dataset successfully.")
 
     # 2) Build model
     model = MultiJODModel().to(config.device)
@@ -211,7 +212,7 @@ if __name__ == "__main__":
     os.makedirs(results_dir, exist_ok=True)
     writer = SummaryWriter(os.path.join(results_dir, "logs"))
 
-    print(f"[Info] Starting training with patience={config.early_stopping_patience} ...")
+    print(f"\n[Info] Starting training with patience={config.early_stopping_patience} ...")
     best_val_loss = float("inf")
     no_improve_count = 0
     best_model_path = None
@@ -225,7 +226,7 @@ if __name__ == "__main__":
             no_improve_count = 0
             best_model_path  = os.path.join(results_dir, f"model_best_epoch.pth")
             torch.save(model.state_dict(), best_model_path )
-            print(f"Best model updated! Saved at {best_model_path }")
+            # print(f"Best model updated! Saved at {best_model_path }")
         else:
             no_improve_count += 1
             print(f"Validation loss did not improve for {no_improve_count} epoch(s).")

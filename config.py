@@ -25,7 +25,7 @@ if mode == "train" or mode == "debug":
     if mode == "debug":
         ML_regression = r'C:\Users\15142\Projects\VRR\Data\VRRML\ML_regression\debug' # 100 train data, 50 test data
         batch_size = 30
-        epochs = 3
+        epochs = 5
     
     train_image_dir = f"{ML_regression}/train"
     val_image_dir = f"{ML_regression}/val"
