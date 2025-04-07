@@ -159,6 +159,37 @@ def validate_one_epoch(model, val_prefetcher, criterion, writer, epoch):
 
     return avg_val_loss
 
+# --------------------
+# Run inference on test data
+# --------------------
+def test_model(model, test_prefetcher, criterion):
+    print("[Info] Running inference on test set...")
+    model.eval()
+    test_prefetcher.reset()
+
+    total_test_loss = 0.0
+    batch_count = 0
+
+    with torch.no_grad():
+        batch = test_prefetcher.next()
+        while batch is not None:
+            image = batch[0]
+            velocity = batch[1]
+            bitrate = batch[2]
+            jod = batch[3]
+
+            preds = model(image, velocity, bitrate)
+            loss = criterion(preds, jod)
+            total_test_loss += loss.item()
+            batch_count += 1
+
+            batch = test_prefetcher.next()
+
+    avg_test_loss = total_test_loss / batch_count
+    print(f"[Test] Avg Loss: {avg_test_loss:.4f}")
+    return avg_test_loss
+
+
 
 
 if __name__ == "__main__":
@@ -192,7 +223,7 @@ if __name__ == "__main__":
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             no_improve_count = 0
-            best_model_path  = os.path.join(results_dir, f"model_best_epoch{epoch+1}.pth")
+            best_model_path  = os.path.join(results_dir, f"model_best_epoch.pth")
             torch.save(model.state_dict(), best_model_path )
             print(f"Best model updated! Saved at {best_model_path }")
         else:
@@ -214,6 +245,10 @@ if __name__ == "__main__":
         final_model_path = os.path.join(results_dir, "model_final.pth")
         torch.save(model.state_dict(), final_model_path)
         print(f"Saved best model as final model to {final_model_path}")
+
+    
+    # Run test
+    test_model(model, test_prefetcher, criterion)
 
     # batch_time = AverageMeter("Time", ":6.3f")
     # data_time = AverageMeter("Data", ":6.3f")
