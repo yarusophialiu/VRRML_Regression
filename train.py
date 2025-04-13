@@ -2,11 +2,11 @@ import os
 import time
 import torch
 
-import torch.optim as optim
-from tqdm import tqdm
+# import torch.optim as optim
+# from tqdm import tqdm
 
 # import torchvision
-import argparse
+# import argparse
 import numpy as np
 import pandas as pd
 # import matplotlib.pyplot as plt
@@ -17,76 +17,82 @@ from sklearn.model_selection import train_test_split
 
 import config
 from MultiJODDataset import *
-from MultiJODModel import *
+# from MultiJODModel import *
+from MultiJODModel_more_expressive import *
 from dataset import CUDAPrefetcher
-from Meter import AverageMeter, ProgressMeter
+# from Meter import AverageMeter, ProgressMeter
 
 
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-def load_dataset():
+def load_dataset(train=True, test=True):
     train_patch_info_csv = f'{config.train_image_dir}/patch_info.csv'
     train_video_info_csv = f'{config.train_image_dir}/video_info.csv'
     val_patch_info_csv = f'{config.val_image_dir}/patch_info.csv'
     val_video_info_csv = f'{config.val_image_dir}/video_info.csv'
     test_patch_info_csv = f'{config.test_image_dir}/patch_info.csv'
     test_video_info_csv = f'{config.test_image_dir}/video_info.csv'
-
-    train_dataset = MultiJODDataset(
-        data_dir=config.train_image_dir,
-        patch_csv=train_patch_info_csv,
-        video_csv=train_video_info_csv,
-    )
-
-    val_dataset = MultiJODDataset(
-        data_dir=config.val_image_dir,
-        patch_csv=val_patch_info_csv,
-        video_csv=val_video_info_csv,
-    )
+    train_prefetcher, val_prefetcher, test_prefetcher = None, None, None
     
-    test_dataset = MultiJODDataset(
-        data_dir=config.test_image_dir,
-        patch_csv=test_patch_info_csv,
-        video_csv=test_video_info_csv,
-    )
+    if train:
+        train_dataset = MultiJODDataset(
+            data_dir=config.train_image_dir,
+            patch_csv=train_patch_info_csv,
+            video_csv=train_video_info_csv,
+        )
 
-    print(f'Total number of: train data {len(train_dataset)}, val data {len(val_dataset)}, test data {len(test_dataset)}')
+        val_dataset = MultiJODDataset(
+            data_dir=config.val_image_dir,
+            patch_csv=val_patch_info_csv,
+            video_csv=val_video_info_csv,
+        )
+        print(f'Total number of: train data {len(train_dataset)}, val data {len(val_dataset)}')
 
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-        num_workers=config.num_workers,
-        pin_memory=True,
-        drop_last=True,
-        persistent_workers=True
-    )
+    if test:
+        test_dataset = MultiJODDataset(
+            data_dir=config.test_image_dir,
+            patch_csv=test_patch_info_csv,
+            video_csv=test_video_info_csv,
+        )
 
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=config.batch_size,
-        shuffle=False,
-        num_workers=config.num_workers,
-        pin_memory=True,
-        drop_last=False,
-        persistent_workers=True
-    )
+        print(f'Total number of: test data {len(test_dataset)}')
 
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=config.test_batch_size,
-        shuffle=False,
-        num_workers=1,
-        pin_memory=True,
-        drop_last=False,
-        persistent_workers=False
-    )
+    if train:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=config.batch_size,
+            shuffle=True,
+            num_workers=config.num_workers,
+            pin_memory=True,
+            drop_last=True,
+            persistent_workers=True
+        )
 
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=config.num_workers,
+            pin_memory=True,
+            drop_last=False,
+            persistent_workers=True
+        )
+        # CUDAPrefetcher : asynchronously loading the next batch to GPU
+        train_prefetcher = CUDAPrefetcher(train_loader, config.device)
+        val_prefetcher   = CUDAPrefetcher(val_loader, config.device)
 
-    # CUDAPrefetcher : asynchronously loading the next batch to GPU
-    train_prefetcher = CUDAPrefetcher(train_loader, config.device)
-    val_prefetcher   = CUDAPrefetcher(val_loader, config.device)
-    test_prefetcher  = CUDAPrefetcher(test_loader, config.device)
+    if test:
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=config.test_batch_size,
+            shuffle=False,
+            num_workers=1,
+            pin_memory=True,
+            drop_last=False,
+            persistent_workers=False
+        )
+
+        test_prefetcher  = CUDAPrefetcher(test_loader, config.device)
 
     return train_prefetcher, val_prefetcher, test_prefetcher
 
@@ -224,7 +230,7 @@ if __name__ == "__main__":
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             no_improve_count = 0
-            best_model_path  = os.path.join(results_dir, f"model_best_epoch.pth")
+            best_model_path  = os.path.join(results_dir, f"model_best_{epoch}.pth")
             torch.save(model.state_dict(), best_model_path )
             # print(f"Best model updated! Saved at {best_model_path }")
         else:
